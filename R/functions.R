@@ -49,8 +49,8 @@ find_carbon_data_files <- function(df, meta, vars){
 generate_land_area <- function(df, basename, intermed_dir, cdo_exe){
   
   # Make sure that there is only meta data information that can be used to claculate the land area wights for a single land area data file.
-  sftlf     <- unique(input[['sftlf']])
-  areacella <- unique(input[['areacella']])
+  sftlf     <- unique(df[['sftlf']])
+  areacella <- unique(df[['areacella']])
   assertthat::assert_that(length(sftlf) == 1)
   assertthat::assert_that(length(areacella) == 1)
   
@@ -84,7 +84,7 @@ weighted_global_mean <- function(dataframe, intermed_dir, cdo_exe, cleanup = FAL
   assertthat::assert_that(all(c('file', 'type', 'domain', 'variable', 'model', 'experiment', 'ensemble', 'grid', 'time', 'areacella', 'sftlf') %in% names(dataframe)))
   
   split(dataframe, interaction(dataframe$model, dataframe$experiment, dataframe$ensemble, dataframe$variable, drop = TRUE)) %>% 
-    lapply(., function(input){
+    lapply(X=., function(input = X){
       
       
       # Define the base name to use for the intermediate files that are saved during this process. 
@@ -92,8 +92,8 @@ weighted_global_mean <- function(dataframe, intermed_dir, cdo_exe, cleanup = FAL
       assertthat::assert_that(nrow(info) == 1)
       
       basename     <- paste(info, collapse = '_')
+
       area_weights <- generate_land_area(input, basename, intermed_dir, cdo_exe)
-      
       
       DataGridArea_nc <-  file.path(intermed_dir, paste0(basename, '_DataGridArea.nc'))
       WeightedMean_nc <-  file.path(intermed_dir, paste0(basename, '_WeightedMean.nc'))
