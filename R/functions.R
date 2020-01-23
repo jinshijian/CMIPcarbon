@@ -75,7 +75,7 @@ generate_land_area <- function(df, basename, intermed_dir, cdo_exe){
 #   intermed_dir: The path to the directory as to where to store the intermediate netcdf files. 
 #   cdo_exe: The path to the CDO EXE 
 #   cleanup: A TRUE/FASLE argument that controls if the intermeidate netcdfs are cleaned  up or not, the default is set to leave intermediates in place.
-# Returns: The path to the netcdf that contains the area weights. 
+# Returns: A data frame of the area weighted global average.  
 weighted_global_mean <- function(dataframe, intermed_dir, cdo_exe, cleanup = FALSE){
   
   # Check the inputs. 
@@ -138,8 +138,108 @@ weighted_global_mean <- function(dataframe, intermed_dir, cdo_exe, cleanup = FAL
   
 } 
 
+# Calculate the land ratio GPP to Soil Resipriation ratio per grid cell 
+# Arguments 
+#   dataframe: A dataframe containing the CMIP data process and the land fraction and cell area netcdfs (because of the way that this function is set up 
+#              it will only calculate the weighted mean for over the land areas, will need to modify to allow for fexlibility to process area over oceans)
+#   intermed_dir: The path to the directory as to where to store the intermediate netcdf files. 
+#   cdo_exe: The path to the CDO EXE 
+# Returns: A data frame of the area weighted GPP to Rs ratio calculated by grid cell. 
+calculate_GPPtoRS_gridcell <- function(dataframe, intermed_dir, cdo_exe){
+  
+  vars <- c('gpp', 'raRoot', 'rhSoil')
+  assertthat::assert_that(all(vars %in% dataframe$variable), msg = 'Missing variable, cannot calcualte the ratio.')
+  
+  dataframe %>% 
+    filter(variable %in% vars) %>% 
+    select(file, variable, model, experiment, ensemble, grid, time, areacella, sftlf) %>% 
+    tidyr::spread(variable, file) %>% 
+    na.omit -> 
+    to_process
+  
+  apply(to_process, 1, function(input){
+    
+    # Define the base name to use for the intermediate files that are saved during this process. 
+    base_name <- paste(input[["model"]], input[["experiment"]], input[["ensemble"]], input[["grid"]],input[["time"]], sep  = '_')
+    
+    # Messages
+    print('------------------------------------------------') 
+    print(base_name)  
+    
+
+    time_nc         <- file.path(intermed_dir, paste0(base_name, '_time.nc'))
+    system2(cdo_exe, args = c('-a', '-copy', input[['gpp']], time_nc), stdout = TRUE, stderr = TRUE )
+    nc <- nc_open(time_nc)
+    file.remove(time_nc)
+    
+    # Import all of the data from the netcdfs. 
+    input[['raRoot']] %>% 
+      nc_open %>% 
+      ncvar_get('raRoot') -> 
+      raRoot 
+    
+    input[['rhSoil']] %>% 
+      nc_open %>% 
+      ncvar_get('rhSoil') -> 
+      rhSoil
+    
+    input[['gpp']] %>% 
+      nc_open %>% 
+      ncvar_get('gpp') -> 
+      gpp
+    
+    input[['sftlf']] %>%  
+      nc_open %>% 
+      ncvar_get('sftlf') -> 
+      sftlf
+    
+    input[['areacella']] %>% 
+      nc_open %>% 
+      ncvar_get('areacella') -> 
+      areacella
+    
+    # Define what we expect 0 to be. 
+    practically_zero <- 3e-11
+    
+    # Identify all of the 0s in the netcdfs, these 
+    # index values will be used to replace value from the 
+    # ratio with 0s.
+    raRoot_zero <- which(abs(raRoot) <= practically_zero)
+    rhSoil_zero <- which(abs(rhSoil) <= practically_zero)
+    gpp_zero    <- which(abs(gpp) <= practically_zero)
+    zeros       <- c(raRoot_zero, rhSoil_zero, gpp_zero)
+    
+    rs_total     <- raRoot + rhSoil
+    ratio        <- rs_total / gpp
+    ratio[zeros] <- 0 
+    
+    
+    # Calculate the land area with in each grid cell, this will 
+    # be used as weights for the global weighted mean. 
+    land_area <- areacella * (sftlf / 100)
+    
+    # Calculate the weighted global average. 
+    value <- apply(ratio, MARGIN = 3, weighted.mean, w = land_area) 
+    
+    # Format the output. 
+    data.frame(value = value, 
+               units = NA, 
+               time = ncvar_get(nc, 'time')) %>%
+      mutate(era = 'cmip6', 
+             variable = 'ratio', 
+             model = input[["model"]], 
+             experiment = input[["experiment"]],
+             ensemble = input[["ensemble"]], 
+             grid = input[["grid"]]) %>%  
+      mutate(year = substr(time, 1, 4)) %>% 
+      select(-time) 
+    
+  }) 
+  
+}
 
   
+
 
 
 

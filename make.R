@@ -15,3 +15,4 @@ make(plan)
 # subsequent make()'s do not build targets.
 
 # Load your targets back into your session with loadd() and readd().
+message('make file complete')

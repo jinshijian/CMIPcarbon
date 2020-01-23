@@ -18,12 +18,17 @@ plan <- drake_plan(
   # Process the CMIP data files. 
   INTERMED = '/pic/scratch/dorh012', 
   CDO = "/share/apps/netcdf/4.3.2/gcc/4.4.7/bin/cdo", 
-  dataframe = carbon_files,
-  global_means = weighted_global_mean(dataframe, intermed_dir = INTERMED, cdo_exe = CDO, cleanup = FALSE), 
+  # Land area weighted global mean 
+    dataframe = carbon_files,
+    global_means = weighted_global_mean(dataframe, intermed_dir = INTERMED, cdo_exe = CDO, cleanup = FALSE),
+  # The grid cell ratio 
+    gridcell_ratio = calculate_GPPtoRS_gridcell(dataframe, intermed_dir = INTERMED, cdo_exe = CDO),
   
   # Save pic output. 
   pic_out = { 
     dir.create(file_out("pic_data"))
     save(global_means, file = './pic_data/weighted_global_mean.rda')
+    save(gridcell_ratio, file = './pic_data/gridcell_ratio.rda')
   }
 )
+
