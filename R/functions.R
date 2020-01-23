@@ -116,7 +116,10 @@ weighted_global_mean <- function(dataframe, intermed_dir, cdo_exe, cleanup = FAL
                   model = df[["model"]], 
                   experiment = df[["experiment"]],
                   ensemble = df[["ensemble"]], 
-                  grid = df[["grid"]])
+                  grid = df[["grid"]]) %>% 
+          mutate(year = substr(time, 1, 4), 
+                 month = substr(time, 5, 6), 
+                 day = substr(time, 7, 8))
         
       }) %>% 
         bind_rows() 
