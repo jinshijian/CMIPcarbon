@@ -238,8 +238,127 @@ calculate_GPPtoRS_gridcell <- function(dataframe, intermed_dir, cdo_exe){
   
 }
 
+
+# Create a data frame of the latitude and longitude coordinates from the observed data. 
+# Arguments 
+#   dir: the input direcotry that contains the rds files of the observations with the coordinates. 
+# Returns: A dataframe of the lat and lon coordinates and observation source. 
+process_LatLon <- function(dir){
+  
+  # Find the lat and lon coordinates. 
+  files   <- list.files(path = dir, pattern = '_LatLon.rds', full.names = TRUE)
+  sources <- gsub(x = basename(files), pattern = '_LatLon.rds|RsGPP_', replacement = '')
+  
+  # Import and format the lat and lon coordinates into a single data frame.
+  mapply(FUN = function(file, source){
+    
+   df <- readRDS(file)
+    
+    assertthat::assert_that(all(c('Latitude', 'Longitude') %in% names(df)))
+    
+    df %>% 
+      select(Latitude, 
+             Longitude) %>%  
+      mutate(source = source)
+    
+  }, file = files, source = sources, SIMPLIFY = FALSE) %>% 
+    dplyr::bind_rows() %>%  
+    na.omit 
+  
+}
+
+
+# Extract the data for specific lat and lon coordiantes from MIP data that correspond to observed data. 
+# Arguemnts
+#   dataframe: A dataframe containing the CMIP data process and the land fraction and cell area netcdfs (because of the way that this function is set up 
+#              it will only calculate the weighted mean for over the land areas, will need to modify to allow for fexlibility to process area over oceans)
+#   coord: A dataframe of the lat and lon coordinates to extract from the MIP data, this data frame should be mae by the process_LatLon function 
+#   intermed_dir: The path to the directory as to where to store the intermediate netcdf files. 
+#   cdo_exe: The path to the CDO EXE 
+# Returns: A data frame of gpp, raRoot, rhSoil, and land area values at specfic coordinates.  
+extract_LatLon <- function(dataframe, coord, intermed_dir, cdo_exe){
+  
+  vars <- c('gpp', 'raRoot', 'rhSoil')
+  assertthat::assert_that(all(vars %in% dataframe$variable), msg = 'Missing variable, cannot calcualte the ratio.')
+  assertthat::assert_that(file.exists(cdo_exe), msg = 'Path to CDO exe does not exist.')
+  assertthat::assert_that(dir.exists(intermed_dir), msg = 'intermed_dir does not exist.')
   
 
-
+  dataframe %>% 
+    filter(variable %in% vars) %>% 
+    select(file, variable, model, experiment, ensemble, grid, time, areacella, sftlf) %>% 
+    tidyr::spread(variable, file) %>% 
+    na.omit -> 
+    to_process
+  
+  apply(to_process, 1, function(input){
+    
+    # Define the base name to use for the intermediate files that are saved during this process. 
+    base_name <- paste(input[["model"]], input[["experiment"]], input[["ensemble"]], input[["grid"]],input[["time"]], sep  = '_')
+    
+    # Messages
+    print('------------------------------------------------') 
+    print(base_name)  
+    
+    # Convert to absolute time extract time information 
+    time_nc  <- file.path(intermed_dir, paste0(base_name, '_time.nc'))
+    system2(cdo_exe, args = c('-a', '-copy', input[['gpp']], time_nc), stdout = TRUE, stderr = TRUE)
+    time     <- ncvar_get(nc_open(time_nc), 'time')
+    
+    # Calculate the land area 
+    area_nc <- generate_land_area(input, base_name, intermed_dir, cdo_exe)
+  
+    # Create the intermediate netcdfs. 
+    gpp_point       <- file.path(intermed_dir, paste0(base_name, '_gpp-LatLon.nc'))
+    raRoot_point    <- file.path(intermed_dir, paste0(base_name, '_raRoot-LatLon.nc'))
+    rhSoil_point    <- file.path(intermed_dir, paste0(base_name, '_rhSoil-LatLon.nc'))
+    area_point      <- file.path(intermed_dir, paste0(base_name, '_area-LatLon.nc'))
+    
+    apply(coord, 1, function(coord_input){
+      
+      LatLon <- paste0('remapnn,lon=',coord_input[['Longitude']],'_lat=',coord_input[['Latitude']])
+      
+      system2(cdo_exe, args = c(LatLon, input[['gpp']], gpp_point), stdout = TRUE, stderr = TRUE)
+      system2(cdo_exe, args = c(LatLon, input[['raRoot']], raRoot_point), stdout = TRUE, stderr = TRUE)
+      system2(cdo_exe, args = c(LatLon, input[['rhSoil']], rhSoil_point), stdout = TRUE, stderr = TRUE)
+      system2(cdo_exe, args = c(LatLon, area_nc, area_point), stdout = TRUE, stderr = TRUE)
+      
+      mapply(FUN = function(nc_file, var){
+        
+        nc    <- nc_open(nc_file)
+        
+        data.table(value = ncvar_get(nc, var), 
+                   units = ncatt_get(nc, var)$unit, 
+                   variable = var, 
+                   time = time) 
+        
+      },
+      nc_file = c(gpp_point, raRoot_point,  rhSoil_point, area_point),
+      var = c('gpp', 'raRoot', 'rhSoil', 'areacella'),
+      SIMPLIFY = FALSE) %>% 
+        bind_rows %>% 
+        mutate(Longitude = coord_input[['Longitude']], 
+               Latitude = coord_input[['Latitude']], 
+               source =  coord_input[['source']]) 
+      
+      
+    }) %>% 
+      bind_rows() %>% 
+      mutate(model = input[["model"]],
+             experiment = input[["experiment"]], 
+             ensemble = input[["ensemble"]], 
+             grid = input[["grid"]], 
+             year = substr(time, 1, 4), 
+             month = substr(time, 5, 6), 
+             day = substr(time, 7, 8))
+    
+    
+    
+    
+  })  %>% 
+    bind_rows() 
+   
+    
+}
 
 
