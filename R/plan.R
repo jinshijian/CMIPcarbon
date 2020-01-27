@@ -29,14 +29,14 @@ plan1 <- drake_plan(
   # Pull out the grid cell ratios for the specific lat/lon coordinates for the soil resipration data base. 
   input_dir = file_in('./input'), 
   coords = process_LatLon(input_dir),
-  values_LatLon = extract_LatLon(dataframe, coord = coords[1:4,], intermed_dir = INTERMED, cdo_exe = CDO),
+  values_LatLon = extract_LatLon(dataframe, coord = coords, intermed_dir = INTERMED, cdo_exe = CDO),
     
   # Save pic output. 
   pic_out = { 
     dir.create(file_out("pic_data"))
-    save(global_means, file = './pic_data/weighted_global_mean.rda')
-    save(gridcell_ratio, file = './pic_data/gridcell_ratio.rda')
-    save(values_LatLon, file = './pic_data/values_LatLon.rda')
+    saveRDS(global_means, file = './pic_data/weighted_global_mean.rds')
+    saveRDS(gridcell_ratio, file = './pic_data/gridcell_ratio.rds')
+    saveRDS(values_LatLon, file = './pic_data/values_LatLon.rds')
   }
 )
 
