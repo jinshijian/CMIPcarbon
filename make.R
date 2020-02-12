@@ -7,12 +7,10 @@ source("R/packages.R")  # Load your packages, e.g. library(drake).
 source("R/functions.R") # Define your custom code as a bunch of functions.
 source("R/plan.R")      # Create your drake plan.
 
-# Call make() to run your work.
-# Your targets will be stored in a hidden .drake/ cache,
-make(plan1)
-#make(plan2)
-# If you do not change any code or data,
-# subsequent make()'s do not build targets.
+
+# Run the CDO Processing on PIC
+make(plan = cdo_processing)
+
 
 # Load your targets back into your session with loadd() and readd().
 message('make file complete')
