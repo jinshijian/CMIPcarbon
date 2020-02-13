@@ -197,65 +197,68 @@ calculate_RStoGPP_gridcell <- function(dataframe, intermed_dir, cdo_exe){
     print('------------------------------------------------')
     print(base_name)
     
-    # Extract the time
-    nc   <- nc_open(input[['gpp']])
-    time <- format_time(nc)
-    nc_close(nc)
+    tryCatch({
+      # Extract the time
+      nc   <- nc_open(input[['gpp']])
+      time <- format_time(nc)
+      nc_close(nc)
+      
+      
+      # Import all of the data from the netcdfs.
+      input[['raRoot']] %>%
+        nc_open %>%
+        ncvar_get('raRoot') ->
+        raRoot
+      
+      input[['rhSoil']] %>%
+        nc_open %>%
+        ncvar_get('rhSoil') ->
+        rhSoil
+      
+      input[['gpp']] %>%
+        nc_open %>%
+        ncvar_get('gpp') ->
+        gpp
+      
+      input[['sftlf']] %>%
+        nc_open %>%
+        ncvar_get('sftlf') ->
+        sftlf
+      
+      input[['areacella']] %>%
+        nc_open %>%
+        ncvar_get('areacella') ->
+        areacella
+      
+      # Define what we expect 0 to be.
+      practically_zero <- 3e-11
+      
+      # Identify all of the 0s in the netcdfs, these
+      # index values will be used to replace value from the
+      # ratio with 0s.
+      raRoot_zero <- which(abs(raRoot) <= practically_zero)
+      rhSoil_zero <- which(abs(rhSoil) <= practically_zero)
+      gpp_zero    <- which(abs(gpp) <= practically_zero)
+      zeros       <- c(raRoot_zero, rhSoil_zero, gpp_zero)
+      
+      rs_total     <- raRoot + rhSoil
+      ratio        <- rs_total / gpp
+      ratio[zeros] <- 0
+      
+      
+      # Calculate the land area with in each grid cell, this will
+      # be used as weights for the global weighted mean.
+      land_area <- areacella * (sftlf / 100)
+      
+      # Calculate the weighted global average.
+      value <- apply(ratio, MARGIN = 3, weighted.mean, w = land_area)
+      
+      data.frame(value = value, 
+                 units = 'Rs:GPP')  %>% 
+        cbind(time, info) 
+      
+    }, error = function(e){mutate(info, problem = TRUE)})
     
-    
-    # Import all of the data from the netcdfs.
-    input[['raRoot']] %>%
-      nc_open %>%
-      ncvar_get('raRoot') ->
-      raRoot
-    
-    input[['rhSoil']] %>%
-      nc_open %>%
-      ncvar_get('rhSoil') ->
-      rhSoil
-    
-    input[['gpp']] %>%
-      nc_open %>%
-      ncvar_get('gpp') ->
-      gpp
-    
-    input[['sftlf']] %>%
-      nc_open %>%
-      ncvar_get('sftlf') ->
-      sftlf
-    
-    input[['areacella']] %>%
-      nc_open %>%
-      ncvar_get('areacella') ->
-      areacella
-    
-    # Define what we expect 0 to be.
-    practically_zero <- 3e-11
-    
-    # Identify all of the 0s in the netcdfs, these
-    # index values will be used to replace value from the
-    # ratio with 0s.
-    raRoot_zero <- which(abs(raRoot) <= practically_zero)
-    rhSoil_zero <- which(abs(rhSoil) <= practically_zero)
-    gpp_zero    <- which(abs(gpp) <= practically_zero)
-    zeros       <- c(raRoot_zero, rhSoil_zero, gpp_zero)
-    
-    rs_total     <- raRoot + rhSoil
-    ratio        <- rs_total / gpp
-    ratio[zeros] <- 0
-    
-    
-    # Calculate the land area with in each grid cell, this will
-    # be used as weights for the global weighted mean.
-    land_area <- areacella * (sftlf / 100)
-    
-    # Calculate the weighted global average.
-    value <- apply(ratio, MARGIN = 3, weighted.mean, w = land_area)
-    
-    data.frame(value = value, 
-               units = 'Rs:GPP')  %>% 
-      cbind(time, info) 
-  
     })  %>% 
     bind_rows()
 } 
