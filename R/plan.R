@@ -29,11 +29,11 @@ cdo_processing <- drake_plan(
   carbon_files = find_carbon_data_files(df = cmip6_archive, meta = meta_data_files, vars = c('gpp', 'raRoot', 'rh', 'rhSoil')), 
 
   # Weighted Averages ############################################################   
-  global_means = weighted_global_mean(dataframe = carbon_files, intermed_dir = INTERMED, cdo_exe = CDO, cleanup = FALSE),
+  global_means = weighted_land_mean(dataframe = carbon_files, intermed_dir = INTERMED, cdo_exe = CDO, cleanup = FALSE),
   global_means_out = saveRDS(global_means, file = file_out(weighted_global_meanRDS)) #, 
   
   # # RS to GPP Ratio ##############################################################
-  # # Start by determining which files should be processed (this makes is easier to 
+  # # Start by determiningit ag which files should be processed (this makes is easier to 
   # # test the RStoGPP functions by limiting the number of rows in to_process_ratios).
   # to_process_ratios = prep_RStoGPP_data(carbon_files),
   # 

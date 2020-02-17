@@ -99,7 +99,7 @@ format_time <- function(nc){
 #  cleanup: A TRUE/FASLE argument that controls if the intermeidate netcdfs are cleaned up or not, 
 #           the default is set to leave intermediates in place.
 # Returns: A data frame of the area weighted global average.
-weighted_land_mean <- function(dataframe, intermed_dir, cleanup = FALSE){
+weighted_land_mean <- function(dataframe, intermed_dir,cdo_exe, cleanup = FALSE){
 
   # Check the inputs.
   assertthat::assert_that(dir.exists(intermed_dir))
