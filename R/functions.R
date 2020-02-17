@@ -126,7 +126,7 @@ weighted_land_mean <- function(dataframe, intermed_dir,cdo_exe, cleanup = FALSE)
     area <- ncdf4::ncvar_get(ncdf4::nc_open(area_weights), 'areacella')
     total_area <- sum(area)
     
-    nc <- ncdf4::nc_open(x$file)
+    nc <- ncdf4::nc_open(x[['file']])
     time <- format_time(nc)
     data <- ncdf4::ncvar_get(nc, info$variable)
     
@@ -140,7 +140,7 @@ weighted_land_mean <- function(dataframe, intermed_dir,cdo_exe, cleanup = FALSE)
           value = mean,
           units = ncdf4::ncatt_get(nc, info$variable)$unit,
           info)
-   write.csv(rslt, file = file.path(intermed_dir, paste0(basename, x$time, 'Mean.csv')), row.names = FALSE)
+   write.csv(rslt, file = file.path(intermed_dir, paste0(basename, x[['time']], 'Mean.csv')), row.names = FALSE)
    
    rslt
    
