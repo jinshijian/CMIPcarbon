@@ -60,13 +60,14 @@ generate_land_area <- function(df, basename, intermed_dir, cdo_exe){
   
   
   system2(cdo_exe, args = c("-divc,100", sftlf, PercentLand_nc), stdout = TRUE, stderr = TRUE)
+  #system2(cdoR::cdo_exe, args = c("-addc,1","-mulc,-0.01", sftlf, PercentLand_nc), stdout = TRUE, stderr = TRUE)
+  
   system2(cdo_exe, args = c("-mul", areacella, PercentLand_nc, LandArea_nc), stdout = TRUE, stderr = TRUE)
   
   assertthat::assert_that(file.exists(LandArea_nc))
   LandArea_nc
   
 }
-
 
 # Extract and format output time results. 
 # Arguments 
@@ -78,9 +79,9 @@ format_time <- function(nc){
   assertthat::assert_that(class(nc) == "ncdf4")
   
   # Convert from relative time to absoulte time using lubridate.
-  time_units <- ncatt_get(nc, 'time')$units
+  time_units <- ncdf4::ncatt_get(nc, 'time')$units
   time_units <- gsub(pattern = 'days since ', replacement = '', time_units)
-  time <- lubridate::as_date(ncvar_get(nc, 'time'), origin = time_units)
+  time <- lubridate::as_date(ncdf4::ncvar_get(nc, 'time'), origin = time_units)
 
   data.frame(datetime = time,
              year = lubridate::year(time),
@@ -88,75 +89,72 @@ format_time <- function(nc){
   
 }
 
+# Calculate the wighted field mean for a netcdf, without using cdo. 
+# TODO see if we can resolve the issues with the cdo setarea grid command. 
+# Arguments
+#  dataframe: A dataframe containing the CMIP data process and the land fraction and cell area netcdfs (because of the way that this function is set up
+#             it will only calculate the weighted mean for over the land areas, will need to modify to allow for fexlibility to process area over oceans)
+#  intermed_dir: The path to the directory as to where to store the intermediate csv files. 
+#             this helps saves the progress if for some reason the code terminates early.
+#  cleanup: A TRUE/FASLE argument that controls if the intermeidate netcdfs are cleaned up or not, 
+#           the default is set to leave intermediates in place.
+# Returns: A data frame of the area weighted global average.
+weighted_land_mean <- function(dataframe, intermed_dir, cleanup = FALSE){
 
-# Calculate the weighted ibal mean for the land variables 
-# Arguments 
-#   dataframe: A dataframe containing the CMIP data process and the land fraction and cell area netcdfs (because of the way that this function is set up 
-#              it will only calculate the weighted mean for over the land areas, will need to modify to allow for fexlibility to process area over oceans)
-#   intermed_dir: The path to the directory as to where to store the intermediate netcdf files. 
-#   cdo_exe: The path to the CDO EXE 
-#   cleanup: A TRUE/FASLE argument that controls if the intermeidate netcdfs are cleaned  up or not, the default is set to leave intermediates in place.
-# Returns: A data frame of the area weighted global average.  
-weighted_global_mean <- function(dataframe, intermed_dir, cdo_exe, cleanup = FALSE){
-  
-  # Check the inputs. 
-  assertthat::assert_that(dir.exists(intermed_dir)) 
-  assertthat::assert_that(file.exists(cdo_exe))
-  assertthat::assert_that(all(c('file', 'type', 'domain', 'variable', 'model', 'experiment', 'ensemble', 'grid', 'time', 'areacella', 'sftlf') %in% names(dataframe)))
-  
-  split(dataframe, interaction(dataframe$model, dataframe$experiment, dataframe$ensemble, dataframe$variable, drop = TRUE)) %>% 
-    lapply(X =., function(input = X){
-      
-      
-      # Define the base name to use for the intermediate files that are saved during this process. 
-      info <- distinct(input[, which(names(input) %in% c("variable", "domain", "model", "experiment", "ensemble", "grid"))])
-      assertthat::assert_that(nrow(info) == 1)
-      
-      basename <- paste(info, collapse = '_')
-      print('--------')
-      print(basename)
-      
-      area_weights <- generate_land_area(input, basename, intermed_dir, cdo_exe)
-      
-      Concat_nc       <- file.path(intermed_dir, paste0(basename, '_DataConcat.nc')) 
-      if(file.exists(Concat_nc)){file.remove(Concat_nc)}
-      
-      DataGridArea_nc <- file.path(intermed_dir, paste0(basename, '_DataGridArea.nc'))
-      WeightedMean_nc <- file.path(intermed_dir, paste0(basename, '_WeightedMean.nc'))
-      
-      system2(cdo_exe, args = c('copy', input[['file']], Concat_nc), stdout = TRUE, stderr = TRUE)
-      system2(cdo_exe, args = c(paste0("setgridarea,", area_weights), Concat_nc, DataGridArea_nc), stdout = TRUE, stderr = TRUE)
-      system2(cdo_exe, args = c('fldmean', DataGridArea_nc, WeightedMean_nc), stdout = TRUE, stderr = TRUE )
-      
-      # Extract the area inforamtion 
-      area <- sum(ncvar_get(nc_open(area_weights), 'areacella'))
-      area_units <- ncatt_get(nc_open(area_weights), 'areacella')$units 
-      
-      
-      # Extract data and format output.
-      assertthat::assert_that(file.exists(WeightedMean_nc))
-      nc <- nc_open(WeightedMean_nc)
-      
-      format_time(nc) %>% 
-        cbind(value = ncvar_get(nc, info[['variable']]), 
-              value_units = ncatt_get(nc, info[['variable']])$units, 
-              info) %>% 
-        mutate(area = area, 
-               area_units = area_units) 
-      
-      
-    }) %>%  
-    bind_rows() -> 
-    output 
-  
+  # Check the inputs.
+  assertthat::assert_that(dir.exists(intermed_dir))
+  assertthat::assert_that(all(c('file', 'type', 'domain', 'variable', 'model', 'experiment', 'ensemble',
+                                'grid', 'time', 'areacella', 'sftlf') %in% names(dataframe)))
+
+  apply(dataframe, 1, function(x){
+    
+    # TODO this could be replaced with another function... I have to do it a lot when working 
+    # with CMIP data in tibble form + applies 
+    info <- tibble::tibble(model = x[['model']], 
+                           variable = x[['variable']], 
+                           domain = x[['domain']], 
+                           experiment = x[['experiment']], 
+                           ensemble = x[['ensemble']], 
+                           grid = x[['grid']])
+    
+    basename <- paste(info, collapse = '_')
+    print('--------')
+    print(basename)
+    
+    # Calculate the area weights. 
+    area_weights <- generate_land_area(x, basename, intermed_dir, cdo_exe)
+    area <- ncdf4::ncvar_get(ncdf4::nc_open(area_weights), 'areacella')
+    total_area <- sum(area)
+    
+    nc <- ncdf4::nc_open(x$file)
+    time <- format_time(nc)
+    data <- ncdf4::ncvar_get(nc, info$variable)
+    
+    # This assertthat may be useful when we start looking into the lat/lon 
+    # patterns. 
+    assertthat::assert_that(all(dim(data)[1:2] == dim(area)))
+    
+    mean <- apply(data, 3, weighted.mean, w = area)
+    
+   rslt <-  cbind(time,
+          value = mean,
+          units = ncdf4::ncatt_get(nc, info$variable)$unit,
+          info)
+   write.csv(rslt, file = file.path(intermed_dir, paste0(basename, x$time, 'Mean.csv')), row.names = FALSE)
+   
+   rslt
+   
+  }) %>% 
+    dplyr::bind_rows(.) -> 
+    out
   
   if(cleanup){
-    file.remove(list.files(intermed_dir, '.nc', full.names = TRUE)) 
+    file.remove(list.files(intermed_dir, '.csv', full.names = TRUE))
   }
-  
-  output
-  
+  out
 } 
+  
+
 
 # Prep the CMIP dataframe to calcualte the Rs to GPP ratio. This function is useful in that it 
 # preps the RStoGPP ratio functions such that the input can easily be index to be tested. 
@@ -397,5 +395,74 @@ extract_LatLon <- function(dataframe, coord, intermed_dir, cdo_exe){
   }) )
   
 }
+
+
+
+# Calculate the weighted ibal mean for the land variables using cdo. 
+# Arguments 
+#   dataframe: A dataframe containing the CMIP data process and the land fraction and cell area netcdfs (because of the way that this function is set up 
+#              it will only calculate the weighted mean for over the land areas, will need to modify to allow for fexlibility to process area over oceans)
+#   intermed_dir: The path to the directory as to where to store the intermediate netcdf files. 
+#   cdo_exe: The path to the CDO EXE 
+#   cleanup: A TRUE/FASLE argument that controls if the intermeidate netcdfs are cleaned  up or not, the default is set to leave intermediates in place.
+# Returns: A data frame of the area weighted global average.  
+# cdo_weighted_global_mean <- function(dataframe, intermed_dir, cdo_exe, cleanup = FALSE){
+#   
+#   # Check the inputs. 
+#   assertthat::assert_that(dir.exists(intermed_dir)) 
+#   assertthat::assert_that(file.exists(cdo_exe))
+#   assertthat::assert_that(all(c('file', 'type', 'domain', 'variable', 'model', 'experiment', 'ensemble', 
+#                                 'grid', 'time', 'areacella', 'sftlf') %in% names(dataframe)))
+#   
+#   split(dataframe, interaction(dataframe$model, dataframe$experiment, dataframe$ensemble, dataframe$variable, dataframe$time, drop = TRUE)) %>% 
+#     lapply(X =., function(input = X){
+#       
+#       
+#       # Define the base name to use for the intermediate files that are saved during this process. 
+#       info <- distinct(input[, which(names(input) %in% c("variable", "domain", "model", "experiment", "ensemble", "grid", "time"))])
+#       assertthat::assert_that(nrow(info) == 1)
+#       
+#       basename <- paste(info, collapse = '_')
+#       print('--------')
+#       print(basename)
+#       
+#       area_weights <- generate_land_area(input, basename, intermed_dir, cdo_exe)
+#   
+#       DataGridArea_nc <- file.path(intermed_dir, paste0(basename, '_DataGridArea.nc'))
+#       WeightedMean_nc <- file.path(intermed_dir, paste0(basename, '_WeightedMean.nc'))
+#       
+#       #system2(cdo_exe, args = c('copy', input[['file']], Concat_nc), stdout = TRUE, stderr = TRUE)
+#       system2(cdo_exe, args = c(paste0("setgridarea,", area_weights), input[['file']], DataGridArea_nc), stdout = TRUE, stderr = TRUE)
+#       system2(cdo_exe, args = c(paste0("fldmean -setgridarea,", area_weights), input[['file']], WeightedMean_nc), stdout = TRUE, stderr = TRUE )
+#       
+#       # Extract the area inforamtion 
+#       area <- sum(ncvar_get(nc_open(area_weights), 'areacella'))
+#       area_units <- ncatt_get(nc_open(area_weights), 'areacella')$units 
+#       
+#       
+#       # Extract data and format output.
+#       assertthat::assert_that(file.exists(WeightedMean_nc))
+#       nc <- nc_open(WeightedMean_nc)
+#       
+#       format_time(nc) %>% 
+#         cbind(value = ncvar_get(nc, info[['variable']]), 
+#               value_units = ncatt_get(nc, info[['variable']])$units, 
+#               info) %>% 
+#         mutate(area = area, 
+#                area_units = area_units) 
+#       
+#       
+#     }) %>%  
+#     bind_rows() -> 
+#     output 
+#   
+#   
+#   if(cleanup){
+#     file.remove(list.files(intermed_dir, '.nc', full.names = TRUE)) 
+#   }
+#   
+#   output
+#   
+# } 
 
 

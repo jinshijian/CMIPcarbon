@@ -28,23 +28,23 @@ cdo_processing <- drake_plan(
   meta_data_files = find_land_meta_files(cmip6_archive), 
   carbon_files = find_carbon_data_files(df = cmip6_archive, meta = meta_data_files, vars = c('gpp', 'raRoot', 'rh', 'rhSoil')), 
 
-  # # Weighted Averages ############################################################   
-  # global_means = weighted_global_mean(carbon_files, intermed_dir = INTERMED, cdo_exe = CDO, cleanup = TRUE),
-  # global_means_out = saveRDS(global_means, file = file_out(weighted_global_meanRDS)), 
+  # Weighted Averages ############################################################   
+  global_means = weighted_global_mean(dataframe = carbon_files, intermed_dir = INTERMED, cdo_exe = CDO, cleanup = FALSE),
+  global_means_out = saveRDS(global_means, file = file_out(weighted_global_meanRDS)) #, 
   
-  # RS to GPP Ratio ##############################################################
-  # Start by determining which files should be processed (this makes is easier to 
-  # test the RStoGPP functions by limiting the number of rows in to_process_ratios).
-  to_process_ratios = prep_RStoGPP_data(carbon_files),
-  
-  # Calculate the ratio at each grid cell and calculate the global average. We are interested 
-  # in asking how different are these restults from the ratio of the global mean, how senstive 
-  # is the ratio to the percision of the units? 
-  mean_gridcell_ratio = calculate_RStoGPP_gridcell(dataframe = to_process_ratios, intermed_dir = INTERMED, cdo_exe = CDO),
-  mean_gridcell_ratio_out = saveRDS(mean_gridcell_ratio, file = file_out(gridcell_ratioRDS)), 
-
-  coords = format_LatLon(input_dir), 
-  values_LatLon = extract_LatLon(dataframe = to_process_ratios, coord = coords, intermed_dir = INTERMED, cdo_exe = CDO)
+  # # RS to GPP Ratio ##############################################################
+  # # Start by determining which files should be processed (this makes is easier to 
+  # # test the RStoGPP functions by limiting the number of rows in to_process_ratios).
+  # to_process_ratios = prep_RStoGPP_data(carbon_files),
+  # 
+  # # Calculate the ratio at each grid cell and calculate the global average. We are interested 
+  # # in asking how different are these restults from the ratio of the global mean, how senstive 
+  # # is the ratio to the percision of the units? 
+  # mean_gridcell_ratio = calculate_RStoGPP_gridcell(dataframe = to_process_ratios, intermed_dir = INTERMED, cdo_exe = CDO),
+  # mean_gridcell_ratio_out = saveRDS(mean_gridcell_ratio, file = file_out(gridcell_ratioRDS)), 
+  # 
+  # coords = format_LatLon(input_dir), 
+  # values_LatLon = extract_LatLon(dataframe = to_process_ratios, coord = coords, intermed_dir = INTERMED, cdo_exe = CDO)
 
 ) 
 
