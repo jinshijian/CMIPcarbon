@@ -307,17 +307,16 @@ extract_LatLon <- function(dataframe, coord, intermed_dir, cdo_exe){
   assertthat::assert_that(file.exists(cdo_exe), msg = 'Path to CDO exe does not exist.')
   assertthat::assert_that(dir.exists(intermed_dir), msg = 'intermed_dir does not exist.')
   
-  
   bind_rows(apply(dataframe, 1, function(input){
     
-    tryCatch({
-      
-      # Define the base name to use for the intermediate files that are saved during this process. 
-      base_name <- paste(input[["model"]], input[["experiment"]], input[["ensemble"]], input[["grid"]], input[["time"]], sep  = '_')
-      
-      # Messages
-      print('------------------------------------------------') 
-      print(base_name)  
+    # Define the base name to use for the intermediate files that are saved during this process. 
+    base_name <- paste(input[["model"]], input[["experiment"]], input[["ensemble"]], input[["grid"]], input[["time"]], sep  = '_')
+    
+    # Messages
+    print('------------------------------------------------') 
+    print(base_name)  
+    
+   out <-  tryCatch({
       
       # Extract time information by selecting one of the CMIP data files to extract 
       # time information from arbitrarily. 
@@ -369,7 +368,7 @@ extract_LatLon <- function(dataframe, coord, intermed_dir, cdo_exe){
                 source =  coord_input[['source']]) 
         
         
-      }) -> 
+      }) ->
         list_all_coords
       
       
@@ -390,9 +389,11 @@ extract_LatLon <- function(dataframe, coord, intermed_dir, cdo_exe){
                                       experiment = input[["experiment"]], 
                                       ensemble = input[["ensemble"]],
                                       time = input[["time"]], 
-                                      problem = TRUE)}) # End of the try catch 
-    
-  }) )
+                                      problem = TRUE)}) # End of the try catch
+   out_file <- file.path(intermed_dir, paste0(base_name, '-LatLon.csv'))
+   write.csv(out, file = out_file, row.names = FALSE)
+   out
+  }))
   
 }
 

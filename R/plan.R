@@ -10,6 +10,7 @@ INTERMED   <- '/pic/scratch/dorh012'
 CDO        <- "/share/apps/netcdf/4.3.2/gcc/4.4.7/bin/cdo" 
 input_dir  <- './input'
 output_dir <- './pic_data'; dir.create(output_dir, showWarnings = FALSE)
+inter_dir  <- './input/pic_data/scratch'; dir.create(inter_dir, showWarnings = FALSE)
 
 weighted_global_meanRDS <- file.path(output_dir, 'weighted_global_mean.rds')
 gridcell_ratioRDS       <- file.path(output_dir, 'gridcell_ratio.rds')
@@ -30,21 +31,23 @@ cdo_processing <- drake_plan(
 
   # Weighted Averages ############################################################   
   global_means = weighted_land_mean(dataframe = carbon_files, intermed_dir = INTERMED, cdo_exe = CDO, cleanup = FALSE),
-  global_means_out = saveRDS(global_means, file = file_out(weighted_global_meanRDS)) #, 
+  global_means_out = saveRDS(global_means, file = file_out(weighted_global_meanRDS)), 
   
-  # # RS to GPP Ratio ##############################################################
-  # # Start by determiningit ag which files should be processed (this makes is easier to 
-  # # test the RStoGPP functions by limiting the number of rows in to_process_ratios).
-  # to_process_ratios = prep_RStoGPP_data(carbon_files),
-  # 
-  # # Calculate the ratio at each grid cell and calculate the global average. We are interested 
-  # # in asking how different are these restults from the ratio of the global mean, how senstive 
-  # # is the ratio to the percision of the units? 
+  # RS to GPP Ratio ##############################################################
+  # Start by determiningit ag which files should be processed (this makes is easier to
+  # test the RStoGPP functions by limiting the number of rows in to_process_ratios).
+  to_process_ratios = prep_RStoGPP_data(carbon_files),
+
+  # # Calculate the ratio at each grid cell and calculate the global average. We are interested
+  # # in asking how different are these restults from the ratio of the global mean, how senstive
+  # # is the ratio to the percision of the units?
   # mean_gridcell_ratio = calculate_RStoGPP_gridcell(dataframe = to_process_ratios, intermed_dir = INTERMED, cdo_exe = CDO),
-  # mean_gridcell_ratio_out = saveRDS(mean_gridcell_ratio, file = file_out(gridcell_ratioRDS)), 
-  # 
-  # coords = format_LatLon(input_dir), 
-  # values_LatLon = extract_LatLon(dataframe = to_process_ratios, coord = coords, intermed_dir = INTERMED, cdo_exe = CDO)
+  # mean_gridcell_ratio_out = saveRDS(mean_gridcell_ratio, file = file_out(gridcell_ratioRDS)),
+
+  coords = format_LatLon(input_dir),
+  values_LatLon = extract_LatLon(dataframe = to_process_ratios, coord = coords, 
+                                 intermed_dir = inter_dir, cdo_exe = CDO), 
+  values_LatLon_out = saveRDS(values_LatLon, file = file_out(values_LatLonRDS))
 
 ) 
 
