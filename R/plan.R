@@ -8,9 +8,10 @@
 ##########################################################################################
 INTERMED   <- '/pic/scratch/dorh012'
 CDO        <- "/share/apps/netcdf/4.3.2/gcc/4.4.7/bin/cdo" 
-input_dir  <- './input'
-output_dir <- './pic_data'; dir.create(output_dir, showWarnings = FALSE)
-inter_dir  <- './input/pic_data/scratch'; dir.create(inter_dir, showWarnings = FALSE)
+base_dir   <- here::here()
+input_dir  <- file.path(base_dir, 'input')
+output_dir <- file.path(base_dir, 'pic_data'); dir.create(output_dir, showWarnings = FALSE)
+inter_dir  <- file.path(output_dir,'scratch'); dir.create(inter_dir, showWarnings = FALSE)
 
 weighted_global_meanRDS <- file.path(output_dir, 'weighted_global_mean.rds')
 gridcell_ratioRDS       <- file.path(output_dir, 'gridcell_ratio.rds')
@@ -28,9 +29,10 @@ cdo_processing <- drake_plan(
     trigger = trigger(condition = TRUE)), 
   meta_data_files = find_land_meta_files(cmip6_archive), 
   carbon_files = find_carbon_data_files(df = cmip6_archive, meta = meta_data_files, vars = c('gpp', 'raRoot', 'rh', 'rhSoil')), 
-
+  
   # Weighted Averages ############################################################   
-  global_means = weighted_land_mean(dataframe = carbon_files, intermed_dir = INTERMED, cdo_exe = CDO, cleanup = FALSE),
+  global_means = weighted_land_mean(dataframe = carbon_files, intermed_dir = INTERMED, 
+                                    cdo_exe = CDO, cleanup = FALSE),
   global_means_out = saveRDS(global_means, file = file_out(weighted_global_meanRDS)), 
   
   # RS to GPP Ratio ##############################################################
