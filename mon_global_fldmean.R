@@ -20,7 +20,7 @@ output_dir <- file.path(base_dir, 'pic_data'); dir.create(output_dir, showWarnin
 # A vector of the carbon files to process and location of where the final results 
 # should be saved. 
 carbon_vars <- c('gpp', 'raRoot', 'rh', 'rhSoil')
-weighted_global_meanRDS <- file.path(output_dir, 'mon_global_fldmean.rds')
+weighted_global_meanCSV <- file.path(output_dir, 'mon_global_fldmean.csv')
 
 # A true false indicator to determine if the intermediate files should be removed or not. 
 CleanUP <- FALSE
@@ -33,6 +33,6 @@ message(cat(nrow(carbon_files), ' netcdfs to be processed.'))
 
 
 global_means     <- weighted_land_mean(dataframe = carbon_files, intermed_dir = inter_dir, cdo_exe = CDO, cleanup = CleanUP)
-global_means_out <- saveRDS(global_means, file = weighted_global_meanRDS)
+write.csv(global_means, file = weighted_global_meanCSV)
 message('done!')
 
