@@ -175,7 +175,8 @@ prep_RStoGPP_data <- function(dataframe){
   dataframe %>% 
     dplyr::filter(variable %in% vars) %>% 
     dplyr::select(file, variable, model, experiment, ensemble, grid, time, areacella, sftlf) %>% 
-    tidyr::spread(variable, file) 
+    tidyr::spread(variable, file) %>%  
+    na.omit 
   
 }
 
@@ -193,115 +194,6 @@ cdo_yearmonmean <- function(name, in_nc, cdo_exe, intermed_dir){
   assertthat::assert_that(file.exists(out_nc))
   out_nc
 }
-
-
-# Calculate the land ratio GPP to Soil Resipriation ratio per grid cell 
-# Arguments 
-#   dataframe: A dataframe containing the CMIP data process and the land fraction and cell area netcdfs (because of the way that this function is set up 
-#              it will only calculate the weighted mean for over the land areas, will need to modify to allow for fexlibility to process area over oceans)
-#   intermed_dir: The path to the directory as to where to store the intermediate netcdf files. 
-#   cdo_exe: The path to the CDO EXE 
-#   zero_def: how do we want to define 0? 
-# Returns: A data frame of the area weighted GPP to Rs ratio calculated by grid cell. 
-calculate_RStoGPP_gridcell <- function(dataframe, intermed_dir, cdo_exe, zero_def){
-  
-  # Define the base name to use for the intermediate files that are saved during this process.
-  req_cols <- c("model", "experiment", "ensemble", "grid", "time", "areacella", "sftlf", "gpp", "raRoot", "rhSoil")
-  assertthat::assert_that(all(req_cols %in% names(dataframe)))
-  
-  apply(dataframe, 1, function(input){
-    
-    info      <- data.frame(model = input[['model']], experiment = input[['experiment']], ensemble = input[['ensemble']], grid = input[['grid']], 
-                            stringsAsFactors = FALSE)
-    base_name <- paste(c(input[['model']], input[['experiment']], input[['ensemble']], input[['grid']]), collapse = '_')
-    
-    print('------------------------------------------------')
-    print(base_name)
-    
-    # Extract the time
-    nc   <- nc_open(input[['gpp']])
-    time <- format_time(nc)
-    nc_close(nc)
-    
-    # Extract the land cella area. 
-    input[['areacella']] %>%
-      nc_open %>%
-      ncvar_get('areacella') ->
-      areacella
-    
-    input[['sftlf']] %>%
-      nc_open %>%
-      ncvar_get('sftlf') ->
-      sftlf
-    
-    
-    # Calculate the land area with in each grid cell, this will
-    # be used as weights for the global weighted mean.
-    land_area <- areacella * (sftlf / 100)
-    
-    # Becasue we want to avoid dividing by small numbers mulitply the 
-    # grid cell values by the area and the time so that now the grid 
-    # cell reflects the annual carbon flux for a grid cell. 
-    mulitplyByArea <- function(input, area = land_area){
-      
-      assertthat::assert_that(length(dim(input)) == 3)
-      
-      for(i in 1:dim(input)[3]){
-        
-        input[ , , i] <- input[ , , i] * area
-        
-      }
-      
-      input
-      
-    }
-    convertTime    <- function(input){
-      # Convert from s-1 to yr -1
-      input * 60*60*24*365
-    }
-    
-    # Import all of the data from the netcdfs.
-    cdo_yearmonmean(base_name, input[['raRoot']], CDO, INTERMED) %>% 
-      nc_open %>%
-      ncvar_get('raRoot') %>% 
-      mulitplyByArea %>%  
-      convertTime -> 
-      raRoot 
-    
-    cdo_yearmonmean(base_name, input[['rhSoil']], CDO, INTERMED) %>% 
-      nc_open %>%
-      ncvar_get('rhSoil') %>%  
-      mulitplyByArea %>% 
-      convertTime -> 
-      rhSoil
-    
-    cdo_yearmonmean(base_name, input[['gpp']], CDO, INTERMED) %>% 
-      nc_open %>%
-      ncvar_get('gpp') %>%  
-      mulitplyByArea %>%  
-      convertTime -> 
-      gpp
-    
-    soil <- raRoot + rhSoil
-    
-    
-    soil[soil <= zero_def] <- 0
-    gpp[gpp <= zero_def] <- 0 
-    
-    ratio <- soil / gpp
-    ratio[is.infinite(ratio)] <- 0 
-    
-    # Calculate the weighted mean of the Rs to GPP ratio
-    value <- apply(ratio, MARGIN = 3, FUN = weighted.mean, w = land_area, na.rm = TRUE) 
-    
-    data.frame(value = value, 
-               units = 'Rs:GPP', 
-               stringsAsFactors = FALSE)  %>% 
-      cbind(time, info) 
-    
-  })  %>% 
-    bind_rows()
-} 
 
 
 
@@ -364,10 +256,6 @@ extract_LatLon <- function(dataframe, coord, intermed_dir, cdo_exe){
       
       out <-  tryCatch({
         
-        # Extract time information by selecting one of the CMIP data files to extract 
-        # time information from arbitrarily. 
-        time <- format_time(nc_open(input[['gpp']])) 
-        
         # Calculate the land area (remove the ocean area form the total cell area.)
         area_nc <- generate_land_area(input, base_name, intermed_dir, cdo_exe)
         
@@ -383,11 +271,25 @@ extract_LatLon <- function(dataframe, coord, intermed_dir, cdo_exe){
           Latt <- round(as.numeric(coord_input[['Latitude']]), digits = 4) 
           
           LatLon <- paste0('remapnn,lon=',Long,'_lat=',Latt)
-          
+          message('extracting ', LatLon)
           system2(cdo_exe, args = c(LatLon, input[['gpp']], gpp_point), stdout = TRUE, stderr = TRUE)
           system2(cdo_exe, args = c(LatLon, input[['raRoot']], raRoot_point), stdout = TRUE, stderr = TRUE)
           system2(cdo_exe, args = c(LatLon, input[['rhSoil']], rhSoil_point), stdout = TRUE, stderr = TRUE)
           system2(cdo_exe, args = c(LatLon, area_nc, area_point), stdout = TRUE, stderr = TRUE)
+          
+          # Calculate the annual averaged weighted by the number of days in a month. 
+          gpp_yr    <- paste0(gpp_point, 'yearmonmean.nc')
+          raRoot_yr <- paste0(raRoot_point, 'yearmonmean.nc')
+          rhSoil_yr <- paste0(rhSoil_point, 'yearmonmean.nc')
+          message('yearmonmean')
+          system2(cdo_exe, args = c('yearmonmean', gpp_point, gpp_yr), stdout = TRUE, stderr = TRUE)
+          system2(cdo_exe, args = c('yearmonmean', raRoot_point, raRoot_yr), stdout = TRUE, stderr = TRUE)
+          system2(cdo_exe, args = c('yearmonmean', rhSoil_point, rhSoil_yr), stdout = TRUE, stderr = TRUE)
+
+          
+          # Extract time information by selecting one of the CMIP data files to extract 
+          # time information from arbitrarily. 
+          time <- format_time(nc_open(gpp_yr)) 
           
           # Create a data table of the variable values at a single coordinate location for 
           # the observed data. 
@@ -401,7 +303,7 @@ extract_LatLon <- function(dataframe, coord, intermed_dir, cdo_exe){
               cbind(time)
             
           },
-          nc_file = c(gpp_point, raRoot_point,  rhSoil_point, area_point),
+          nc_file = c(gpp_yr, raRoot_yr,  rhSoil_point, area_point),
           var = c('gpp', 'raRoot', 'rhSoil', 'areacella'),
           SIMPLIFY = FALSE)  
           # Format the results into a single long format data frame with 
@@ -416,7 +318,6 @@ extract_LatLon <- function(dataframe, coord, intermed_dir, cdo_exe){
           
         }) ->
           list_all_coords
-        
         
         
         # Concatenate all of the extracted cooridnate values into a single data frame 
@@ -441,7 +342,7 @@ extract_LatLon <- function(dataframe, coord, intermed_dir, cdo_exe){
       out
       
     } else {
-      
+      cat('Importing previous results from ', out_file)
       read.csv(out_file, stringsAsFactors = FALSE)
       
     }
@@ -451,72 +352,5 @@ extract_LatLon <- function(dataframe, coord, intermed_dir, cdo_exe){
 }
 
 
-
-# Calculate the weighted ibal mean for the land variables using cdo. 
-# Arguments 
-#   dataframe: A dataframe containing the CMIP data process and the land fraction and cell area netcdfs (because of the way that this function is set up 
-#              it will only calculate the weighted mean for over the land areas, will need to modify to allow for fexlibility to process area over oceans)
-#   intermed_dir: The path to the directory as to where to store the intermediate netcdf files. 
-#   cdo_exe: The path to the CDO EXE 
-#   cleanup: A TRUE/FASLE argument that controls if the intermeidate netcdfs are cleaned  up or not, the default is set to leave intermediates in place.
-# Returns: A data frame of the area weighted global average.  
-# cdo_weighted_global_mean <- function(dataframe, intermed_dir, cdo_exe, cleanup = FALSE){
-#   
-#   # Check the inputs. 
-#   assertthat::assert_that(dir.exists(intermed_dir)) 
-#   assertthat::assert_that(file.exists(cdo_exe))
-#   assertthat::assert_that(all(c('file', 'type', 'domain', 'variable', 'model', 'experiment', 'ensemble', 
-#                                 'grid', 'time', 'areacella', 'sftlf') %in% names(dataframe)))
-#   
-#   split(dataframe, interaction(dataframe$model, dataframe$experiment, dataframe$ensemble, dataframe$variable, dataframe$time, drop = TRUE)) %>% 
-#     lapply(X =., function(input = X){
-#       
-#       
-#       # Define the base name to use for the intermediate files that are saved during this process. 
-#       info <- distinct(input[, which(names(input) %in% c("variable", "domain", "model", "experiment", "ensemble", "grid", "time"))])
-#       assertthat::assert_that(nrow(info) == 1)
-#       
-#       basename <- paste(info, collapse = '_')
-#       print('--------')
-#       print(basename)
-#       
-#       area_weights <- generate_land_area(input, basename, intermed_dir, cdo_exe)
-#   
-#       DataGridArea_nc <- file.path(intermed_dir, paste0(basename, '_DataGridArea.nc'))
-#       WeightedMean_nc <- file.path(intermed_dir, paste0(basename, '_WeightedMean.nc'))
-#       
-#       #system2(cdo_exe, args = c('copy', input[['file']], Concat_nc), stdout = TRUE, stderr = TRUE)
-#       system2(cdo_exe, args = c(paste0("setgridarea,", area_weights), input[['file']], DataGridArea_nc), stdout = TRUE, stderr = TRUE)
-#       system2(cdo_exe, args = c(paste0("fldmean -setgridarea,", area_weights), input[['file']], WeightedMean_nc), stdout = TRUE, stderr = TRUE )
-#       
-#       # Extract the area inforamtion 
-#       area <- sum(ncvar_get(nc_open(area_weights), 'areacella'))
-#       area_units <- ncatt_get(nc_open(area_weights), 'areacella')$units 
-#       
-#       
-#       # Extract data and format output.
-#       assertthat::assert_that(file.exists(WeightedMean_nc))
-#       nc <- nc_open(WeightedMean_nc)
-#       
-#       format_time(nc) %>% 
-#         cbind(value = ncvar_get(nc, info[['variable']]), 
-#               value_units = ncatt_get(nc, info[['variable']])$units, 
-#               info) %>% 
-#         mutate(area = area, 
-#                area_units = area_units) 
-#       
-#       
-#     }) %>%  
-#     bind_rows() -> 
-#     output 
-#   
-#   
-#   if(cleanup){
-#     file.remove(list.files(intermed_dir, '.nc', full.names = TRUE)) 
-#   }
-#   
-#   output
-#   
-# } 
 
 
