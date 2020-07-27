@@ -303,7 +303,7 @@ extract_LatLon <- function(dataframe, coord, intermed_dir, cdo_exe){
               cbind(time)
             
           },
-          nc_file = c(gpp_yr, raRoot_yr,  rhSoil_point, area_point),
+          nc_file = c(gpp_yr, raRoot_yr,  rhSoil_yr, area_point),
           var = c('gpp', 'raRoot', 'rhSoil', 'areacella'),
           SIMPLIFY = FALSE)  
           # Format the results into a single long format data frame with 

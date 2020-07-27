@@ -61,7 +61,7 @@ df_global_area <- df_area_coords %>%
   ungroup()
 ```
 
-Calculate the annual mean, in theory the dimensions should not change because this is annual data. This is a precautionary step  just incase the results for a single year were split over mulitple files. 
+Calculate the annual mean flux, in theory the dimensions should not change because this is annual data. This is a precautionary step  just incase the results for a single year were split over mulitple files. 
 ```{r}
 raw_data %>%  
   group_by(year, variable, experiment, ensemble, model, coords, units) %>%  
@@ -143,16 +143,6 @@ clean_laltlon_data %>%
 ## Calculate the Percent of Global Total. 
 
 
-
-
-
-
-
-
-
-
-
-
 ```{r}
 global <- rename(clean_global_data, global = value)
 
@@ -198,8 +188,28 @@ rh_data  <- clean_laltlon_data[clean_laltlon_data$variable == 'rh', ]
 write.csv(x = gpp_data, file = file.path(out_dir, paste0('gpp_latlon_', yrs, '.csv')), row.names = FALSE)
 write.csv(x = npp_data, file = file.path(out_dir, paste0('npp_latlon_', yrs, '.csv')), row.names = FALSE)
 write.csv(x = rh_data, file = file.path(out_dir, paste0('rh_latlon_', yrs, '.csv')), row.names = FALSE)
+```
 
-write.csv(x = df_area_coords, file = file.path(out_dir, paste0('area_latlon_model', yrs, '.csv')), row.names = FALSE)
+
+
+```{r}
+
+yrs <- paste0(range(percent_data$year), collapse = '-')
+gpp_data <- percent_data[percent_data$variable == 'gpp', ]
+npp_data <- percent_data[percent_data$variable == 'npp', ]
+rh_data  <- percent_data[percent_data$variable == 'rh', ]
+
+write.csv(x = gpp_data, file = file.path(out_dir, paste0('gpp_latlon_percent_global_', yrs, '.csv')), row.names = FALSE)
+write.csv(x = npp_data, file = file.path(out_dir, paste0('npp_latlon_percent_global_', yrs, '.csv')), row.names = FALSE)
+write.csv(x = rh_data, file = file.path(out_dir, paste0('rh_latlon_percent_global_', yrs, '.csv')), row.names = FALSE)
+```
+
+
+
+Save information about the area per sampled region. 
+```{r}
+df_area_coords$units <- 'm^2'
+write.csv(x = df_area_coords, file = file.path(out_dir, paste0('area_latlon_model.csv')), row.names = FALSE)
 ```
 
 
