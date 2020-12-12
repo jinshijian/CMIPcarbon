@@ -13,12 +13,13 @@ library(magrittr)
 library(data.table)
 library(lubridate)
 library(tibble)
+# install.packages('udunits2')
 
 # Where to save the results. 
 out_dir <- here::here('JJ_projects', 'data'); dir.create(out_dir, showWarnings = FALSE)
 
 # Import the data, only look at the values of Rh. 
-raw_data <- read.csv(here::here('pic_data', 'yr_latlon_fldmean.csv'), stringsAsFactors = FALSE)
+raw_data <- read.csv('~/Documents/PNNL/landmodels/extdata/yr_latlon_fldmean.csv', stringsAsFactors = FALSE)
 
 # Subset the data so  that it only contains data from the years we are intrested in. 
 raw_data <- raw_data[raw_data$year %in% 1980:2015, ]

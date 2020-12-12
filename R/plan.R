@@ -1,4 +1,4 @@
-
+library(drake)
 # Okay looking over this I am not that happy with how things are turnning out... I think that his code is really 
 # messy and I have found lots of errors. I think that moving forward I reall need to plan naming conventions better 
 # and I am annoyed becasue I can't tell if drake is going to be a good thing for me to be useing or not. 
@@ -6,8 +6,8 @@
 ##########################################################################################
 ## CDO PROCESSING SET UP 
 ##########################################################################################
-INTERMED   <- '/pic/scratch/dorh012'
-CDO        <- "/share/apps/netcdf/4.3.2/gcc/4.4.7/bin/cdo" 
+# INTERMED   <- '/pic/scratch/dorh012'
+# CDO        <- "/share/apps/netcdf/4.3.2/gcc/4.4.7/bin/cdo" 
 base_dir   <- here::here()
 input_dir  <- file.path(base_dir, 'input')
 output_dir <- file.path(base_dir, 'pic_data'); dir.create(output_dir, showWarnings = FALSE)

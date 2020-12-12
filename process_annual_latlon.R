@@ -6,9 +6,10 @@
 # Load required libs 
 library(tibble)
 library(dplyr)
+# install.packages('foreach')
 library(foreach)
-source('/pic/projects/GCAM/Dorheim/CMIPcarbon/R/functions.R') # The carbon project specific functions 
-devtools::load_all('/pic/projects/GCAM/Dorheim/cdoR')         # Other cdo functions 
+source('R/functions.R') # The carbon project specific functions 
+# devtools::load_all('/pic/projects/GCAM/Dorheim/cdoR')         # Other cdo functions 
 
 # Define the dirs. 
 base_dir   <- here::here()
